@@ -86,9 +86,9 @@ uint32_t hash5Tuple(const Packet* packet)
 	const Layer* transportLayer;
 
 	if (packet->isPacketOfType(TCP))
-		transportLayer = packet->getLayerOfType<TcpLayer>();
+		transportLayer = packet->getLayerOfType<TcpLayer>(true);
 	else if (packet->isPacketOfType(UDP))
-		transportLayer = packet->getLayerOfType<UdpLayer>();
+		transportLayer = packet->getLayerOfType<UdpLayer>(true);
 	else
 		return 0;
 
