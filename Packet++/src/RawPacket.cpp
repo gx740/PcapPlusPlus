@@ -45,13 +45,16 @@ RawPacket::RawPacket(const RawPacket& other)
 
 RawPacket& RawPacket::operator=(const RawPacket& other)
 {
-	if (m_RawData != NULL)
-		delete [] m_RawData;
+	if (this != &other)
+	{
+		if (m_RawData != NULL)
+			delete [] m_RawData;
 
-	m_RawPacketSet = false;
+		m_RawPacketSet = false;
 
-	copyDataFrom(other, true);
-
+		copyDataFrom(other, true);
+	}
+	
 	return *this;
 }
 
@@ -94,36 +97,6 @@ bool RawPacket::setRawData(const uint8_t* pRawData, int rawDataLen, timeval time
 	return true;
 }
 
-const uint8_t* RawPacket::getRawData() const
-{
-	return m_RawData;
-}
-
-const uint8_t* RawPacket::getRawDataReadOnly() const
-{
-	return m_RawData;
-}
-		
-LinkLayerType RawPacket::getLinkLayerType() const
-{
-	return m_LinkLayerType;
-}
-
-int RawPacket::getRawDataLen() const
-{
-	return m_RawDataLen;
-}
-
-int RawPacket::getFrameLength() const
-{
-	return m_FrameLength;
-}
-
-timeval RawPacket::getPacketTimeStamp() const
-{
-	return m_TimeStamp;
-}
-
 void RawPacket::clear()
 {
 	if (m_RawData != 0)
@@ -137,21 +110,21 @@ void RawPacket::clear()
 
 void RawPacket::appendData(const uint8_t* dataToAppend, size_t dataToAppendLen)
 {
-	memcpy((uint8_t*)m_RawData+m_RawDataLen, dataToAppend, dataToAppendLen);
+	memcpy((uint8_t*)m_RawData + m_RawDataLen, dataToAppend, dataToAppendLen);
 	m_RawDataLen += dataToAppendLen;
 	m_FrameLength = m_RawDataLen;
 }
 
 void RawPacket::insertData(int atIndex, const uint8_t* dataToInsert, size_t dataToInsertLen)
 {
-	int index = m_RawDataLen-1;
+	int index = m_RawDataLen - 1;
 	while (index >= atIndex)
 	{
-		m_RawData[index+dataToInsertLen] = m_RawData[index];
+		m_RawData[index + dataToInsertLen] = m_RawData[index];
 		index--;
 	}
 
-	memcpy((uint8_t*)m_RawData+atIndex, dataToInsert, dataToInsertLen);
+	memcpy((uint8_t*)m_RawData + atIndex, dataToInsert, dataToInsertLen);
 	m_RawDataLen += dataToInsertLen;
 	m_FrameLength = m_RawDataLen;
 }
