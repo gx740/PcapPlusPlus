@@ -170,17 +170,15 @@ void IPFilter::convertToIPAddressWithLen(std::string& ipAddrmodified, int& len) 
 	}
 	else if (ipAddr.isIPv4())
 	{
-		const IPv4Address& ip4Addr = ipAddr.getIPv4();
-		uint32_t addrAsInt = ip4Addr.toUInt();
+		uint32_t addrAsInt = ipAddr.getIPv4().toUInt();
 		uint32_t mask = (uint32_t)(-1) >> ((sizeof(uint32_t) * 8) - m_Len);
 		addrAsInt &= mask;
 		ipAddrmodified = IPv4Address(addrAsInt).toString();
 	}
 	else // IPv6
 	{
-		const IPv6Address& ip6Addr = ipAddr.getIPv6();
-		uint8_t* addrAsArr; size_t addrLen;
-		ip6Addr.copyTo(&addrAsArr, addrLen);
+		uint8_t addrAsArr[16];
+		ipAddr.getIPv6().copyTo(addrAsArr);
 		uint64_t addrLowerBytes = (long)addrAsArr;
 		uint64_t addrHigherBytes = (long)(addrAsArr + 8);
 		if (len > (int)(sizeof(uint64_t) * 8))
@@ -194,7 +192,6 @@ void IPFilter::convertToIPAddressWithLen(std::string& ipAddrmodified, int& len) 
 		}
 
 		ipAddrmodified = IPv6Address(addrAsArr).toString();
-		delete [] addrAsArr;
 	}
 }
 
@@ -208,7 +205,7 @@ void IPFilter::parseToString(std::string& result)
 	convertToIPAddressWithLen(ipAddr, len);
 	parseDirection(dir);
 	result = "ip and " + dir + " net " + ipAddr;
-	if (m_IPv4Mask != "")
+	if (!m_IPv4Mask.empty())
 		result += " mask " + mask;
 	else if (m_Len > 0)
 	{
@@ -387,6 +384,7 @@ void ProtoFilter::parseToString(std::string& result)
 		result = stream.str();
 		break;
 	default:
+		result.clear();
 		break;
 	}
 }
