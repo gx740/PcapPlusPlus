@@ -100,11 +100,11 @@ int main(int argc, char* argv[])
 	AppName::init(argc, argv);
 
 	int maxTries = DEFAULT_MAX_TRIES;
-	MacAddress sourceMac = MacAddress::Zero;
-	IPv4Address sourceIP = IPv4Address::Zero;
-	IPv4Address targetIP = IPv4Address::Zero;
+	MacAddress sourceMac;
+	IPv4Address sourceIP;
+	IPv4Address targetIP;
 	bool targetIpProvided = false;
-	std::string ifaceNameOrIP = "";
+	std::string ifaceNameOrIP;
 	bool ifaceNameOrIpProvided = false;
 	int timeoutSec = NetworkUtils::DefaultTimeout;
 	int optionIndex = 0;
@@ -160,17 +160,17 @@ int main(int argc, char* argv[])
 		EXIT_WITH_ERROR_AND_PRINT_USAGE("You must provide target IP (-T switch)");
 
 	// verify target IP is value
-	if (!targetIP.isValid())
+	if (targetIP.isUnspecified())
 		EXIT_WITH_ERROR_AND_PRINT_USAGE("Target IP is not valid");
 
 
 	PcapLiveDevice* dev = NULL;
 
 	// Search interface by name or IP
-	if (ifaceNameOrIP != "")
+	if (!ifaceNameOrIP.empty())
 	{
 		IPv4Address interfaceIP(ifaceNameOrIP);
-		if (interfaceIP.isValid())
+		if (!interfaceIP.isUnspecified())
 		{
 			dev = PcapLiveDeviceList::getInstance().getPcapLiveDeviceByIp(interfaceIP);
 			if (dev == NULL)
@@ -202,10 +202,10 @@ int main(int argc, char* argv[])
 	if (!sourceMac.isValid() || sourceMac == MacAddress::Zero)
 		EXIT_WITH_ERROR_AND_PRINT_USAGE("MAC address couldn't be extracted from interface");
 
-	if (!sourceIP.isValid() || sourceIP == IPv4Address::Zero)
+	if (sourceIP.isUnspecified())
 		sourceIP = dev->getIPv4Address();
 
-	if (!sourceIP.isValid() || sourceIP == IPv4Address::Zero)
+	if (sourceIP.isUnspecified())
 		EXIT_WITH_ERROR_AND_PRINT_USAGE("Source IPv4 address wasn't supplied and couldn't be retrieved from interface");
 
 	// let's go

@@ -102,7 +102,7 @@ MacAddress NetworkUtils::getMacAddress(IPv4Address ipAddr, PcapLiveDevice* devic
 	if (sourceMac == MacAddress::Zero)
 		sourceMac = device->getMacAddress();
 
-	if (sourceIP == IPv4Address::Zero)
+	if (sourceIP.isUnspecified())
 		sourceIP = device->getIPv4Address();
 
 	if (arpTimeout <= 0)
@@ -312,7 +312,7 @@ static void dnsResponseRecieved(RawPacket* rawPacket, PcapLiveDevice* device, vo
 IPv4Address NetworkUtils::getIPv4Address(std::string hostname, PcapLiveDevice* device, double& dnsResponseTimeMS, uint32_t& dnsTTL,
 		int dnsTimeout, IPv4Address dnsServerIP, IPv4Address gatewayIP) const
 {
-	IPv4Address result = IPv4Address::Zero;
+	IPv4Address result;
 
 	// open the device if not already opened
 	bool closeDeviceAtTheEnd = false;
@@ -329,12 +329,12 @@ IPv4Address NetworkUtils::getIPv4Address(std::string hostname, PcapLiveDevice* d
 	// first - resolve gateway MAC address
 
 	// if gateway IP wasn't provided - try to find the default gateway
-	if (gatewayIP == IPv4Address::Zero)
+	if (gatewayIP.isUnspecified())
 	{
 		gatewayIP = device->getDefaultGateway();
 	}
 
-	if (!gatewayIP.isValid() || gatewayIP == IPv4Address::Zero)
+	if (gatewayIP.isUnspecified())
 	{
 		LOG_ERROR("Gateway address isn't valid or couldn't find default gateway");
 		return result;
@@ -354,12 +354,12 @@ IPv4Address NetworkUtils::getIPv4Address(std::string hostname, PcapLiveDevice* d
 		dnsTimeout = NetworkUtils::DefaultTimeout;
 
 	// validate DNS server IP. If it wasn't provided - set the system-configured DNS server
-	if (dnsServerIP == IPv4Address::Zero && device->getDnsServers().size() > 0)
+	if (dnsServerIP.isUnspecified() && device->getDnsServers().size() > 0)
 	{
 		dnsServerIP = device->getDnsServers().at(0);
 	}
 
-	if (!dnsServerIP.isValid())
+	if (dnsServerIP.isUnspecified())
 	{
 		LOG_ERROR("DNS server IP isn't valid");
 		return result;
@@ -423,7 +423,7 @@ IPv4Address NetworkUtils::getIPv4Address(std::string hostname, PcapLiveDevice* d
 			hostname,
 			transactionID,
 			clock(),
-			IPv4Address::Zero,
+			IPv4Address(),
 			0,
 			0
 	};

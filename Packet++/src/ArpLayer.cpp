@@ -8,7 +8,7 @@
 namespace pcpp
 {
 
-ArpLayer::ArpLayer(ArpOpcode opCode, const MacAddress& senderMacAddr, const MacAddress& targetMacAddr, const IPv4Address senderIpAddr, const IPv4Address& targetIpAddr)
+ArpLayer::ArpLayer(ArpOpcode opCode, const MacAddress& senderMacAddr, const MacAddress& targetMacAddr, const IPv4Address& senderIpAddr, const IPv4Address& targetIpAddr)
 {
 	const size_t headerLen = sizeof(arphdr);
 	m_DataLen = headerLen;
@@ -20,8 +20,8 @@ ArpLayer::ArpLayer(ArpOpcode opCode, const MacAddress& senderMacAddr, const MacA
 	arpHeader->opcode = htobe16(static_cast<uint16_t>(opCode));
 	targetMacAddr.copyTo(arpHeader->targetMacAddr);
 	senderMacAddr.copyTo(arpHeader->senderMacAddr);
-	arpHeader->targetIpAddr = targetIpAddr.toInt();
-	arpHeader->senderIpAddr = senderIpAddr.toInt();
+	arpHeader->targetIpAddr = targetIpAddr.toUInt();
+	arpHeader->senderIpAddr = senderIpAddr.toUInt();
 }
 
 void ArpLayer::computeCalculateFields()
