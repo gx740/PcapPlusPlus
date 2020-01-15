@@ -569,6 +569,17 @@ namespace pcpp
 		 */
 		bool removeAllOptions();
 
+		/**
+		 * This method overrides the method of base class (Layer) to improve performance
+		 * @return A pointer for the layer payload, meaning the first byte after the header
+		 */
+		uint8_t* getLayerPayload() const { return getData() + getHeaderLen(); }
+
+		/**
+		 * This method overrides the method of base class (Layer) to improve performance
+		 * @return The size in bytes of the payload
+		 */
+		size_t getLayerPayloadSize() const { return getDataLen() - getHeaderLen(); }
 
 		// implement abstract methods
 
