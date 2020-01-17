@@ -5,7 +5,13 @@
 #include "IpAddress.h"
 #include "PointerVector.h"
 #include <map>
+
+#if __cplusplus > 199711L || _MSC_VER >= 1800
+#include <forward_list>
+#else
 #include <list>
+#endif
+
 #include <time.h>
 
 
@@ -349,8 +355,14 @@ private:
 		TcpReassemblyData() : numOfSides(0), prevSide(-1) {}
 	};
 	
+	#if __cplusplus > 199711L || _MSC_VER >= 1800
+	typedef std::forward_list<uint32_t> CleanupListType;
+	#else
+	typedef std::list<uint32_t> CleanupListType;
+	#endif
+
 	typedef std::map<uint32_t, TcpReassemblyData*> ConnectionList;
-	typedef std::map<time_t, std::list<uint32_t> > CleanupList;
+	typedef std::map<time_t, CleanupListType> CleanupList;
 
 	OnTcpMessageReady m_OnMessageReadyCallback;
 	OnTcpConnectionStart m_OnConnStart;
