@@ -41,6 +41,33 @@ TcpReassembly::~TcpReassembly()
 	}
 }
 
+
+struct IPAddresses
+{
+	IPAddress src, dst;
+};
+
+static inline IPAddresses getAddresses(const Packet& pkt, Layer** ipLayer)
+{
+	if(pkt.isPacketOfType(IPv4))
+	{
+		*ipLayer = pkt.getLayerOfType<IPv4Layer>();
+		if(*ipLayer != NULL)
+			return IPAddresses { static_cast<IPv4Layer*>(*ipLayer)->getSrcIpAddress(), static_cast<IPv4Layer*>(*ipLayer)->getDstIpAddress() };
+	}
+	else if(pkt.isPacketOfType(IPv6))
+	{
+		*ipLayer = pkt.getLayerOfType<IPv6Layer>();
+		if(*ipLayer != NULL)
+			return IPAddresses { static_cast<IPv6Layer*>(*ipLayer)->getSrcIpAddress(), static_cast<IPv6Layer*>(*ipLayer)->getDstIpAddress() };
+	}
+	else
+		*ipLayer = NULL;
+
+	return IPAddresses();
+}
+
+
 void TcpReassembly::reassemblePacket(Packet& tcpData)
 {
 	// automatic cleanup
@@ -55,40 +82,17 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 
 	// calculate packet's source and dest IP addresses
-	IPAddress srcIP, dstIP;
-	Layer* ipLayer;
-
-	if (tcpData.isPacketOfType(IPv4))
-	{
-		ipLayer = tcpData.getLayerOfType<IPv4Layer>();
-		if (ipLayer != NULL)
-		{
-			srcIP = static_cast<IPv4Layer*>(ipLayer)->getSrcIpAddress();
-			dstIP = static_cast<IPv4Layer*>(ipLayer)->getDstIpAddress();
-		}
-		else
-			return;
-	}
-	else if (tcpData.isPacketOfType(IPv6))
-	{
-		ipLayer = tcpData.getLayerOfType<IPv6Layer>();
-		if (ipLayer != NULL)
-		{
-			srcIP = static_cast<IPv6Layer*>(ipLayer)->getSrcIpAddress();
-			dstIP = static_cast<IPv6Layer*>(ipLayer)->getDstIpAddress();
-		}
-		else
-			return;
-	}
-	else
-		return;
+	Layer *ipLayer;
+	IPAddresses ipAddrs = getAddresses(tcpData, &ipLayer);
 
 	// in real traffic the IP addresses cannot be an unspecified
-	if(srcIP.isUnspecified() || dstIP.isUnspecified())
+	if(ipAddrs.src.isUnspecified() || ipAddrs.dst.isUnspecified())
 	{
-		LOG_ERROR("Some IP address is unspecified: srcIP [%s], dstIP [%s]. Ignoring this packet", srcIP.toString().c_str(), dstIP.toString().c_str());
+		LOG_ERROR("Some IP address is unspecified: srcIP [%s], dstIP [%s]. Ignoring this packet", ipAddrs.src.toString().c_str(), ipAddrs.src.toString().c_str());
 		return;
 	}
+
+	// NOTE: The only case the ipLayer pointer can be NULL when both of the IP addresses are unspecified. So the check of ipLayer is unnecessary.
 
 
 	// Ignore non-TCP packets
@@ -129,8 +133,8 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	{
 		// if it's a packet of a new connection, create a TcpReassemblyData object and add it to the active connection list
 		tcpReassemblyData = new TcpReassemblyData();
-		tcpReassemblyData->connData.setSrcIpAddress(srcIP);
-		tcpReassemblyData->connData.setDstIpAddress(dstIP);
+		tcpReassemblyData->connData.setSrcIpAddress(ipAddrs.src);
+		tcpReassemblyData->connData.setDstIpAddress(ipAddrs.dst);
 		tcpReassemblyData->connData.srcPort = be16toh(tcpLayer->getTcpHeader()->portSrc);
 		tcpReassemblyData->connData.dstPort = be16toh(tcpLayer->getTcpHeader()->portDst);
 		tcpReassemblyData->connData.flowKey = flowKey;
@@ -182,7 +186,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 		// open the first side of the connection, side index is 0
 		sideIndex = 0;
-		tcpReassemblyData->twoSides[sideIndex].srcIP = srcIP;
+		tcpReassemblyData->twoSides[sideIndex].srcIP = ipAddrs.src;
 		tcpReassemblyData->twoSides[sideIndex].srcPort = srcPort;
 		tcpReassemblyData->numOfSides++;
 		first = true;
@@ -191,7 +195,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	else if (tcpReassemblyData->numOfSides == 1)
 	{
 		// check if packet belongs to that side
-		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == srcIP)
+		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
 		{
 			sideIndex = 0;
 		}
@@ -200,7 +204,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 			// this means packet belong to the second side which doesn't yet exist. Open a second side with side index 1
 			LOG_DEBUG("Setting second side of a connection");
 			sideIndex = 1;
-			tcpReassemblyData->twoSides[sideIndex].srcIP = srcIP;
+			tcpReassemblyData->twoSides[sideIndex].srcIP = ipAddrs.src;
 			tcpReassemblyData->twoSides[sideIndex].srcPort = srcPort;
 			tcpReassemblyData->numOfSides++;
 			first = true;
@@ -210,12 +214,12 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	else if (tcpReassemblyData->numOfSides == 2)
 	{
 		// check if packet matches side 0
-		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == srcIP)
+		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
 		{
 			sideIndex = 0;
 		}
 		// check if packet matches side 1
-		else if (tcpReassemblyData->twoSides[1].srcPort == srcPort && tcpReassemblyData->twoSides[1].srcIP == srcIP)
+		else if (tcpReassemblyData->twoSides[1].srcPort == srcPort && tcpReassemblyData->twoSides[1].srcIP == ipAddrs.src)
 		{
 			sideIndex = 1;
 		}
