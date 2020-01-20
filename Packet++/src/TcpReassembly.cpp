@@ -164,7 +164,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	{
 		// if this packet belongs to a connection that was already closed (for example: data packet that comes after FIN), ignore it.
 		// the connection is already closed when the value of mapped type is NULL
-		if (iter->second == NULL)
+		if (unlikely(iter->second == NULL))
 		{
 			LOG_DEBUG("Ignoring packet of already closed flow [0x%X]", flowKey);
 			return;
@@ -193,57 +193,57 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 	switch (tcpReassemblyData->numOfSides)
 	{
-	// if this is a new connection and it's the first packet we see on that connection
-	case 0:
-		LOG_DEBUG("Setting side for new connection");
-		// open the first side of the connection, side index is 0
-		sideIndex = 0;
-		tcpReassemblyData->twoSides[sideIndex].srcIP = ipAddrs.src;
-		tcpReassemblyData->twoSides[sideIndex].srcPort = srcPort;
-		tcpReassemblyData->numOfSides++;
-		first = true;
-		break;
-
-	// if there is already one side in this connection (which will be at side index 0)
-	case 1:
-		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
-		{ // check if packet belongs to that side
+		// if this is a new connection and it's the first packet we see on that connection
+		case 0:
+			LOG_DEBUG("Setting side for new connection");
+			// open the first side of the connection, side index is 0
 			sideIndex = 0;
-		}
-		else
-		{
-			// this means packet belong to the second side which doesn't yet exist. Open a second side with side index 1
-			LOG_DEBUG("Setting second side of a connection");
-			sideIndex = 1;
 			tcpReassemblyData->twoSides[sideIndex].srcIP = ipAddrs.src;
 			tcpReassemblyData->twoSides[sideIndex].srcPort = srcPort;
 			tcpReassemblyData->numOfSides++;
 			first = true;
-		}
-		break;
-
-	// if there are already 2 sides open for this connection
-	case 2:
-		// check if packet matches side 0
-		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
-		{
-			sideIndex = 0;
 			break;
-		}
-		// check if packet matches side 1
-		else if (tcpReassemblyData->twoSides[1].srcPort == srcPort && tcpReassemblyData->twoSides[1].srcIP == ipAddrs.src)
-		{
-			sideIndex = 1;
-			break;
-		}
-		// packet doesn't match either side. This case doesn't make sense but it's handled anyway. Packet will be ignored
-		LOG_ERROR("Error occurred - packet doesn't match either side of the connection!!");
-		return;
 
-	default:
-		// there are more than 2 side - this case doesn't make sense and shouldn't happen, but handled anyway. Packet will be ignored
-		LOG_ERROR("Error occurred - connection has more than 2 sides!!");
-		return;
+		// if there is already one side in this connection (which will be at side index 0)
+		case 1:
+			if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
+			{ // check if packet belongs to that side
+				sideIndex = 0;
+			}
+			else
+			{
+				// this means packet belong to the second side which doesn't yet exist. Open a second side with side index 1
+				LOG_DEBUG("Setting second side of a connection");
+				sideIndex = 1;
+				tcpReassemblyData->twoSides[sideIndex].srcIP = ipAddrs.src;
+				tcpReassemblyData->twoSides[sideIndex].srcPort = srcPort;
+				tcpReassemblyData->numOfSides++;
+				first = true;
+			}
+			break;
+
+		// if there are already 2 sides open for this connection
+		case 2:
+			// check if packet matches side 0
+			if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
+			{
+				sideIndex = 0;
+				break;
+			}
+			// check if packet matches side 1
+			else if (tcpReassemblyData->twoSides[1].srcPort == srcPort && tcpReassemblyData->twoSides[1].srcIP == ipAddrs.src)
+			{
+				sideIndex = 1;
+				break;
+			}
+			// packet doesn't match either side. This case doesn't make sense but it's handled anyway. Packet will be ignored
+			LOG_ERROR("Error occurred - packet doesn't match either side of the connection!!");
+			return;
+
+		default:
+			// there are more than 2 side - this case doesn't make sense and shouldn't happen, but handled anyway. Packet will be ignored
+			LOG_ERROR("Error occurred - connection has more than 2 sides!!");
+			return;
 	} // switch(numOfSides)
 
 
