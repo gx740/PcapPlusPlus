@@ -9,6 +9,7 @@
 #include <sstream>
 #include <vector>
 #include "EndianPortable.h"
+#include "macros.h"
 
 #define PURGE_FREQ_SECS 1
 
@@ -16,6 +17,8 @@
 #define SEQ_LEQ(a,b) ((int32_t)((a)-(b)) <= 0)
 #define SEQ_GT(a,b)  ((int32_t)((a)-(b)) > 0)
 #define SEQ_GEQ(a,b) ((int32_t)((a)-(b)) >= 0)
+
+
 
 namespace pcpp
 {
@@ -47,7 +50,7 @@ struct IPAddresses
 	IPAddress src, dst;
 
 	IPAddresses() {};
-	IPAddresses(const IPAddress &srcAddr, const IPAddress &dstAddr) : src(srcAddr), dst(dstAddr) {}
+	IPAddresses(const IPAddress& srcAddr, const IPAddress& dstAddr) : src(srcAddr), dst(dstAddr) {}
 };
 
 static inline IPAddresses getAddresses(const Packet& pkt, Layer** ipLayer)
@@ -82,7 +85,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	// automatic cleanup
 	if (m_RemoveConnInfo == true)
 	{
-		if(time(NULL) >= m_PurgeTimepoint)
+		if(unlikely(time(NULL) >= m_PurgeTimepoint))
 		{
 			purgeClosedConnections();
 			m_PurgeTimepoint = time(NULL) + PURGE_FREQ_SECS;
@@ -95,7 +98,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	IPAddresses ipAddrs = getAddresses(tcpData, &ipLayer);
 
 	// in real traffic the IP addresses cannot be an unspecified
-	if(ipAddrs.src.isUnspecified() || ipAddrs.dst.isUnspecified())
+	if(unlikely(ipAddrs.src.isUnspecified() || ipAddrs.dst.isUnspecified()))
 	{
 		LOG_ERROR("Some IP address is unspecified: srcIP [%s], dstIP [%s]. Ignoring this packet", ipAddrs.src.toString().c_str(), ipAddrs.src.toString().c_str());
 		return;
@@ -106,13 +109,13 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 	// Ignore non-TCP packets
 	TcpLayer* tcpLayer = tcpData.getLayerOfType<TcpLayer>(true); // lookup in reverse order
-	if (tcpLayer == NULL)
+	if (unlikely(tcpLayer == NULL))
 		return;
 
 	// Ignore the packet if it's an ICMP packet that has a TCP layer
 	// Several ICMP messages (like "destination unreachable") have TCP data as part of the ICMP message.
 	// This is not real TCP data and packet can be ignored
-	if (tcpData.isPacketOfType(ICMP))
+	if (unlikely(tcpData.isPacketOfType(ICMP)))
 	{
 		LOG_DEBUG("Packet is of type ICMP so TCP data is probably  part of the ICMP message. Ignoring this packet");
 		return;
@@ -138,7 +141,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	// find the connection in the connection map
 	ConnectionList::iterator iter = m_ConnectionList.find(flowKey);
 
-	if (iter == m_ConnectionList.end())
+	if (unlikely(iter == m_ConnectionList.end()))
 	{
 		// if it's a packet of a new connection, create a TcpReassemblyData object and add it to the active connection list
 		tcpReassemblyData = new TcpReassemblyData();
@@ -189,7 +192,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	uint16_t srcPort = tcpLayer->getTcpHeader()->portSrc;
 
 	// if this is a new connection and it's the first packet we see on that connection
-	if (tcpReassemblyData->numOfSides == 0)
+	if (unlikely(tcpReassemblyData->numOfSides == 0))
 	{
 		LOG_DEBUG("Setting side for new connection");
 
@@ -247,14 +250,14 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	}
 
 	// if this side already got FIN or RST packet before, ignore this packet as this side is considered closed
-	if (tcpReassemblyData->twoSides[sideIndex].gotFinOrRst)
+	if (unlikely(tcpReassemblyData->twoSides[sideIndex].gotFinOrRst))
 	{
 		LOG_DEBUG("Got a packet after FIN or RST were already seen on this side (%d). Ignoring this packet", sideIndex);
 		return;
 	}
 
 	// handle FIN/RST packets that don't contain additional TCP data
-	if (isFinOrRst && tcpPayloadSize == 0)
+	if (unlikely(isFinOrRst && tcpPayloadSize == 0))
 	{
 		LOG_DEBUG("Got FIN or RST packet without data on side %d", sideIndex);
 
@@ -272,8 +275,8 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	//
 	// I'm aware that there are edge cases where the situation I described above is not true, but at some point we must clean the out-of-order packet list to avoid memory leak.
 	// I decided to do what Wireshark does and clean this list when starting to see a message from the other side
-	if (!first && tcpPayloadSize > 0 && tcpReassemblyData->prevSide != -1 && tcpReassemblyData->prevSide != sideIndex &&
-			tcpReassemblyData->twoSides[tcpReassemblyData->prevSide].tcpFragmentList.size() > 0)
+	if (unlikely(!first && tcpPayloadSize > 0 && tcpReassemblyData->prevSide != -1 && tcpReassemblyData->prevSide != sideIndex &&
+			tcpReassemblyData->twoSides[tcpReassemblyData->prevSide].tcpFragmentList.size() > 0))
 	{
 		LOG_DEBUG("Seeing a first data packet from a different side. Previous side was %d, current side is %d", tcpReassemblyData->prevSide, sideIndex);
 		checkOutOfOrderFragments(tcpReassemblyData, tcpReassemblyData->prevSide, true);
@@ -284,7 +287,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	uint32_t sequence = be32toh(tcpLayer->getTcpHeader()->sequenceNumber);
 
 	// if it's the first packet we see on this side of the connection
-	if (first)
+	if (unlikely(first))
 	{
 		LOG_DEBUG("First data from this side of the connection");
 
@@ -344,7 +347,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	}
 
 	// if packet sequence is exactly as expected - this is the "good" case and the most common one
-	else if (sequence == tcpReassemblyData->twoSides[sideIndex].sequence)
+	if (sequence == tcpReassemblyData->twoSides[sideIndex].sequence)
 	{
 		// if TCP data size is 0 - nothing to do
 		if (tcpPayloadSize == 0)
@@ -389,37 +392,33 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 	// this case means sequence size of the packet is higher than expected which means the packet is out-of-order or some packets were lost (missing data).
 	// we don't know which of the 2 cases it is at this point so we just add this data to the out-of-order packet list
-	else
+	
+	if (tcpPayloadSize == 0) // if TCP data size is 0 - nothing to do
 	{
-		// if TCP data size is 0 - nothing to do
-		if (tcpPayloadSize == 0)
-		{
-			LOG_DEBUG("Payload length is 0, doing nothing");
-
-			// handle case where this packet is FIN or RST
-			if (isFinOrRst)
-				handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
-
-			return;
-		}
-
-		// create a new TcpFragment, copy the TCP data to it and add this packet to the the out-of-order packet list
-		TcpFragment* newTcpFrag = new TcpFragment();
-		newTcpFrag->data = new uint8_t[tcpPayloadSize];
-		newTcpFrag->dataLength = tcpPayloadSize;
-		newTcpFrag->sequence = sequence;
-		memcpy(newTcpFrag->data, tcpLayer->getLayerPayload(), tcpPayloadSize);
-		tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.pushBack(newTcpFrag);
-
-		LOG_DEBUG("Found out-of-order packet and added a new TCP fragment with size %d to the out-of-order list of side %d", (int)tcpPayloadSize, sideIndex);
+		LOG_DEBUG("Payload length is 0, doing nothing");
 
 		// handle case where this packet is FIN or RST
 		if (isFinOrRst)
-		{
 			handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
-			return;
-		}
 
+		return;
+	}
+
+	// create a new TcpFragment, copy the TCP data to it and add this packet to the the out-of-order packet list
+	TcpFragment* newTcpFrag = new TcpFragment();
+	newTcpFrag->data = new uint8_t[tcpPayloadSize];
+	newTcpFrag->dataLength = tcpPayloadSize;
+	newTcpFrag->sequence = sequence;
+	memcpy(newTcpFrag->data, tcpLayer->getLayerPayload(), tcpPayloadSize);
+	tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.pushBack(newTcpFrag);
+
+	LOG_DEBUG("Found out-of-order packet and added a new TCP fragment with size %d to the out-of-order list of side %d", (int)tcpPayloadSize, sideIndex);
+
+	// handle case where this packet is FIN or RST
+	if (isFinOrRst)
+	{
+		handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
+		return;
 	}
 }
 
@@ -448,7 +447,7 @@ void TcpReassembly::handleFinOrRst(TcpReassemblyData* tcpReassemblyData, int sid
 	tcpReassemblyData->twoSides[sideIndex].gotFinOrRst = true;
 
 	// check if the other side also sees FIN or RST packet. If so - close the flow. Otherwise - only clear the out-of-order packets for this side
-	int otherSideIndex = 1 - sideIndex;
+	int8_t otherSideIndex = 1 - sideIndex;
 	if (tcpReassemblyData->twoSides[otherSideIndex].gotFinOrRst)
 		closeConnectionInternal(flowKey, TcpReassembly::TcpReassemblyConnectionClosedByFIN_RST);
 	else
@@ -636,9 +635,8 @@ void TcpReassembly::closeConnection(uint32_t flowKey)
 
 void TcpReassembly::closeConnectionInternal(uint32_t flowKey, ConnectionEndReason reason)
 {
-	TcpReassemblyData* tcpReassemblyData = NULL;
 	ConnectionList::iterator iter = m_ConnectionList.find(flowKey);
-	if (iter == m_ConnectionList.end())
+	if (unlikely(iter == m_ConnectionList.end()))
 	{
 		LOG_ERROR("Cannot close flow with key 0x%X: cannot find flow", flowKey);
 		return;
@@ -649,7 +647,7 @@ void TcpReassembly::closeConnectionInternal(uint32_t flowKey, ConnectionEndReaso
 
 	LOG_DEBUG("Closing connection with flow key 0x%X", flowKey);
 
-	tcpReassemblyData = iter->second;
+	TcpReassemblyData* tcpReassemblyData = iter->second;
 
 	LOG_DEBUG("Calling checkOutOfOrderFragments on side 0");
 	checkOutOfOrderFragments(tcpReassemblyData, 0, true);
