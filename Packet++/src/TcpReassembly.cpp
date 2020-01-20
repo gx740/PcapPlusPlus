@@ -64,7 +64,7 @@ static inline IPAddresses getAddresses(const Packet& pkt, Layer** ipLayer)
 			return IPAddresses(ipv4Layer->getSrcIpAddress(), ipv4Layer->getDstIpAddress());
 		}
 	}
-	else if(pkt.isPacketOfType(IPv6))
+	else if(likely(pkt.isPacketOfType(IPv6)))
 	{
 		*ipLayer = pkt.getLayerOfType<IPv6Layer>();
 		if(*ipLayer != NULL)
@@ -83,7 +83,7 @@ static inline IPAddresses getAddresses(const Packet& pkt, Layer** ipLayer)
 void TcpReassembly::reassemblePacket(Packet& tcpData)
 {
 	// automatic cleanup
-	if (m_RemoveConnInfo == true)
+	if (likely(m_RemoveConnInfo == true))
 	{
 		if(unlikely(time(NULL) >= m_PurgeTimepoint))
 		{
@@ -191,24 +191,23 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	// calculate packet's source port
 	uint16_t srcPort = tcpLayer->getTcpHeader()->portSrc;
 
-	// if this is a new connection and it's the first packet we see on that connection
-	if (unlikely(tcpReassemblyData->numOfSides == 0))
+	switch (tcpReassemblyData->numOfSides)
 	{
+	// if this is a new connection and it's the first packet we see on that connection
+	case 0:
 		LOG_DEBUG("Setting side for new connection");
-
 		// open the first side of the connection, side index is 0
 		sideIndex = 0;
 		tcpReassemblyData->twoSides[sideIndex].srcIP = ipAddrs.src;
 		tcpReassemblyData->twoSides[sideIndex].srcPort = srcPort;
 		tcpReassemblyData->numOfSides++;
 		first = true;
-	}
+		break;
+
 	// if there is already one side in this connection (which will be at side index 0)
-	else if (tcpReassemblyData->numOfSides == 1)
-	{
-		// check if packet belongs to that side
+	case 1:
 		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
-		{
+		{ // check if packet belongs to that side
 			sideIndex = 0;
 		}
 		else
@@ -221,33 +220,32 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 			tcpReassemblyData->numOfSides++;
 			first = true;
 		}
-	}
+		break;
+
 	// if there are already 2 sides open for this connection
-	else if (tcpReassemblyData->numOfSides == 2)
-	{
+	case 2:
 		// check if packet matches side 0
 		if (tcpReassemblyData->twoSides[0].srcPort == srcPort && tcpReassemblyData->twoSides[0].srcIP == ipAddrs.src)
 		{
 			sideIndex = 0;
+			break;
 		}
 		// check if packet matches side 1
 		else if (tcpReassemblyData->twoSides[1].srcPort == srcPort && tcpReassemblyData->twoSides[1].srcIP == ipAddrs.src)
 		{
 			sideIndex = 1;
+			break;
 		}
 		// packet doesn't match either side. This case doesn't make sense but it's handled anyway. Packet will be ignored
-		else
-		{
-			LOG_ERROR("Error occurred - packet doesn't match either side of the connection!!");
-			return;
-		}
-	}
-	// there are more than 2 side - this case doesn't make sense and shouldn't happen, but handled anyway. Packet will be ignored
-	else
-	{
+		LOG_ERROR("Error occurred - packet doesn't match either side of the connection!!");
+		return;
+
+	default:
+		// there are more than 2 side - this case doesn't make sense and shouldn't happen, but handled anyway. Packet will be ignored
 		LOG_ERROR("Error occurred - connection has more than 2 sides!!");
 		return;
-	}
+	} // switch(numOfSides)
+
 
 	// if this side already got FIN or RST packet before, ignore this packet as this side is considered closed
 	if (unlikely(tcpReassemblyData->twoSides[sideIndex].gotFinOrRst))
