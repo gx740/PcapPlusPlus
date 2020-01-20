@@ -56,25 +56,26 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 	// calculate packet's source and dest IP addresses
 	IPAddress srcIP, dstIP;
+	Layer* ipLayer;
 
 	if (tcpData.isPacketOfType(IPv4))
 	{
-		const IPv4Layer* ipv4Layer = tcpData.getLayerOfType<IPv4Layer>();
-		if (ipv4Layer != NULL)
+		ipLayer = tcpData.getLayerOfType<IPv4Layer>();
+		if (ipLayer != NULL)
 		{
-			srcIP = ipv4Layer->getSrcIpAddress();
-			dstIP = ipv4Layer->getDstIpAddress();
+			srcIP = static_cast<IPv4Layer*>(ipLayer)->getSrcIpAddress();
+			dstIP = static_cast<IPv4Layer*>(ipLayer)->getDstIpAddress();
 		}
 		else
 			return;
 	}
 	else if (tcpData.isPacketOfType(IPv6))
 	{
-		const IPv6Layer* ipv6Layer = tcpData.getLayerOfType<IPv6Layer>();
-		if (ipv6Layer != NULL)
+		ipLayer = tcpData.getLayerOfType<IPv6Layer>();
+		if (ipLayer != NULL)
 		{
-			srcIP = ipv6Layer->getSrcIpAddress();
-			dstIP = ipv6Layer->getDstIpAddress();
+			srcIP = static_cast<IPv6Layer*>(ipLayer)->getSrcIpAddress();
+			dstIP = static_cast<IPv6Layer*>(ipLayer)->getDstIpAddress();
 		}
 		else
 			return;
