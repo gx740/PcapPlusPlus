@@ -45,21 +45,30 @@ TcpReassembly::~TcpReassembly()
 struct IPAddresses
 {
 	IPAddress src, dst;
+
+	IPAddresses() {};
+	IPAddresses(const IPAddress &srcAddr, const IPAddress &dstAddr) : src(srcAddr), dst(dstAddr) {}
 };
 
 static inline IPAddresses getAddresses(const Packet& pkt, Layer** ipLayer)
 {
-	if(pkt.isPacketOfType(IPv4))
+	if (pkt.isPacketOfType(IPv4))
 	{
 		*ipLayer = pkt.getLayerOfType<IPv4Layer>();
-		if(*ipLayer != NULL)
-			return IPAddresses { static_cast<IPv4Layer*>(*ipLayer)->getSrcIpAddress(), static_cast<IPv4Layer*>(*ipLayer)->getDstIpAddress() };
+		if (*ipLayer != NULL)
+		{
+			const IPv4Layer* ipv4Layer = static_cast<const IPv4Layer*>(*ipLayer);
+			return IPAddresses(ipv4Layer->getSrcIpAddress(), ipv4Layer->getDstIpAddress());
+		}
 	}
 	else if(pkt.isPacketOfType(IPv6))
 	{
 		*ipLayer = pkt.getLayerOfType<IPv6Layer>();
 		if(*ipLayer != NULL)
-			return IPAddresses { static_cast<IPv6Layer*>(*ipLayer)->getSrcIpAddress(), static_cast<IPv6Layer*>(*ipLayer)->getDstIpAddress() };
+		{
+			const IPv6Layer *ipv6Layer = static_cast<const IPv6Layer*>(*ipLayer);
+			return IPAddresses(ipv6Layer->getSrcIpAddress(), ipv6Layer->getDstIpAddress());
+		}
 	}
 	else
 		*ipLayer = NULL;
