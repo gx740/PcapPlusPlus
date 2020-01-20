@@ -17,13 +17,5 @@
 	#endif
 #endif
 
-
-#if __cplusplus > 199711L || _MSC_VER >= 1800
-	#define nothrow noexcept
-#else
-	#define nothrow throw()
-#endif
-
-
 #endif
 

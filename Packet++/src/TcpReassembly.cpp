@@ -55,7 +55,7 @@ struct IPAddresses
 
 static inline IPAddresses getAddresses(const Packet& pkt, Layer** ipLayer)
 {
-	if (pkt.isPacketOfType(IPv4))
+	if (likely(pkt.isPacketOfType(IPv4)))
 	{
 		*ipLayer = pkt.getLayerOfType<IPv4Layer>();
 		if (*ipLayer != NULL)
