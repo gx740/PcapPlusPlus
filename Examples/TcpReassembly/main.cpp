@@ -338,7 +338,7 @@ void listInterfaces()
 /**
  * The callback being called by the TCP reassembly module whenever new data arrives on a certain connection
  */
-static void tcpReassemblyMsgReadyCallback(int sideIndex, const TcpStreamData& tcpData, void* userCookie)
+static void tcpReassemblyMsgReadyCallback(int8_t sideIndex, const TcpStreamData& tcpData, void* userCookie)
 {
 	// extract the connection manager from the user cookie
 	TcpReassemblyConnMgr* connMgr = (TcpReassemblyConnMgr*)userCookie;
@@ -351,7 +351,7 @@ static void tcpReassemblyMsgReadyCallback(int sideIndex, const TcpStreamData& tc
 		iter = connMgr->find(tcpData.getConnectionData().flowKey);
 	}
 
-	int side;
+	int8_t side;
 
 	// if the user wants to write each side in a different file - set side as the sideIndex, otherwise write everything to the same file ("side 0")
 	if (GlobalConfig::getInstance().separateSides)
