@@ -649,6 +649,9 @@ void TcpReassembly::closeConnectionInternal(uint32_t flowKey, ConnectionEndReaso
 	if (m_OnConnEnd != NULL)
 		m_OnConnEnd(tcpReassemblyData.connData, reason, m_UserCookie);
 
+	// clear unnecessary data
+	tcpReassemblyData.twoSides[0].tcpFragmentList.clear();
+	tcpReassemblyData.twoSides[1].tcpFragmentList.clear();
 	tcpReassemblyData.closed = true; // mark the connection as closed
 	insertIntoCleanupList(flowKey);
 

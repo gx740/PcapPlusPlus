@@ -455,7 +455,7 @@ public:
 	/**
 	 * Copy constructor
 	 */
-	InputIterator(const InputIterator& iter) : m_Iterator { iter.m_Iterator } {}
+	InputIterator(const InputIterator& iter) : m_Iterator(iter.m_Iterator) {}
 
 	/**
 	 * Copy assignement operator
