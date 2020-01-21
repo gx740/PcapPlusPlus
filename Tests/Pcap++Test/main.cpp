@@ -5489,6 +5489,56 @@ PTF_TEST_CASE(TestTcpReassemblyCleanup)
 } // TestTcpReassemblyCleanup
 
 
+PTF_TEST_CASE(TestTcpReassemblyViewer)
+{
+	TcpReassemblyMultipleConnStats results;
+	std::string errMsg;
+
+	TcpReassembly tcpReassembly(tcpReassemblyMsgReadyCallback, &results, tcpReassemblyConnectionStartCallback, tcpReassemblyConnectionEndCallback);
+	TcpReassembly::ConnectionViewer managedConnections = tcpReassembly.getConnectionViewer();
+	PTF_ASSERT_TRUE(managedConnections.empty());
+	PTF_ASSERT_TRUE(managedConnections.begin() == managedConnections.end());
+
+	std::vector<RawPacket> packetStream;
+	PTF_ASSERT_TRUE(tcpReassemblyReadPcapIntoPacketVec("PcapExamples/three_http_streams.pcap", packetStream, errMsg));
+
+	for(std::vector<RawPacket>::iterator iter = packetStream.begin(); iter != packetStream.end(); iter++)
+	{
+		Packet packet(&(*iter));
+		tcpReassembly.reassemblePacket(packet);
+	}
+
+	PTF_ASSERT_EQUAL(managedConnections.size(), 3, size);
+	PTF_ASSERT_FALSE(managedConnections.empty());
+
+	TcpReassembly::ConnectionViewer::const_iterator iter = managedConnections.begin();
+	PTF_ASSERT_TRUE(iter != managedConnections.end());
+
+	ConnectionData firstElement = *iter; // make a copy of the first element
+
+	// testing the increment operators
+	TcpReassembly::ConnectionViewer::const_iterator firstConnIter = iter++, secondConnIter = iter, thirdConnIter = ++iter;
+	PTF_ASSERT_TRUE(firstConnIter == managedConnections.begin());
+	PTF_ASSERT_FALSE(firstConnIter == secondConnIter);
+	PTF_ASSERT_TRUE(++thirdConnIter == managedConnections.end());
+
+	// testing the operator->()
+	PTF_ASSERT_EQUAL(firstElement.dstIP, firstConnIter->dstIP, object);
+	PTF_ASSERT_EQUAL(firstElement.srcIP, firstConnIter->srcIP, object);
+	PTF_ASSERT_EQUAL(firstElement.srcPort, firstConnIter->srcPort, u16);
+	PTF_ASSERT_EQUAL(firstElement.dstPort, firstConnIter->dstPort, u16);
+
+	// testing the lookup
+	TcpReassembly::ConnectionViewer::const_iterator resIter = managedConnections.find(firstElement);
+	PTF_ASSERT_TRUE(resIter!= managedConnections.end());
+	PTF_ASSERT_TRUE(resIter == firstConnIter);
+	
+	ConnectionData dummyConn;
+	dummyConn.flowKey = 0x12345678;
+	PTF_ASSERT_TRUE(managedConnections.find(dummyConn) == managedConnections.end());
+} // TestTcpReassemblyViewer
+
+
 PTF_TEST_CASE(TestTcpReassemblyMaxSeq)
 {
 	std::string errMsg;
@@ -6957,6 +7007,7 @@ int main(int argc, char* argv[])
 	PTF_RUN_TEST(TestDpdkMbufRawPacket, "dpdk");
 	PTF_RUN_TEST(TestDpdkDeviceWorkerThreads, "dpdk");
 	PTF_RUN_TEST(TestGetMacAddress, "mac");
+	PTF_RUN_TEST(TestTcpReassemblyViewer, "no_network;tcp_reassembly");
 	PTF_RUN_TEST(TestTcpReassemblySanity, "no_network;tcp_reassembly");
 	PTF_RUN_TEST(TestTcpReassemblyRetran, "no_network;tcp_reassembly");
 	PTF_RUN_TEST(TestTcpReassemblyMissingData, "no_network;tcp_reassembly");

@@ -5,6 +5,7 @@
 #include "IpAddress.h"
 #include "PointerVector.h"
 #include <map>
+#include <iterator>
 
 #if __cplusplus > 199711L || _MSC_VER >= 1800
 #include <forward_list>
@@ -208,6 +209,7 @@ struct TcpReassemblyConfiguration
 };
 
 
+
 /**
  * @class TcpReassembly
  * A class containing the TCP reassembly logic. Please refer to the documentation at the top of TcpReassembly.h for understanding how to use this class
@@ -215,6 +217,7 @@ struct TcpReassemblyConfiguration
 class TcpReassembly
 {
 public:
+	class ConnectionViewer;
 
 	/**
 	 * An enum for connection end reasons
@@ -269,12 +272,6 @@ public:
 	TcpReassembly(OnTcpMessageReady onMessageReadyCallback, void* userCookie = NULL, OnTcpConnectionStart onConnectionStartCallback = NULL, OnTcpConnectionEnd onConnectionEndCallback = NULL, const TcpReassemblyConfiguration &config = TcpReassemblyConfiguration());
 
 	/**
-	 * A d'tor for this class. Frees all internal structures. Notice that if the d'tor is called while connections are still open, all data is lost and TcpReassembly#OnTcpConnectionEnd won't
-	 * be called for those connections
-	 */
-	~TcpReassembly();
-
-	/**
 	 * The most important method of this class which gets a packet from the user and processes it. If this packet opens a new connection, ends a connection or contains new data on an
 	 * existing connection, the relevant callback will be called (TcpReassembly#OnTcpMessageReady, TcpReassembly#OnTcpConnectionStart, TcpReassembly#OnTcpConnectionEnd)
 	 * @param[in] tcpData A reference to the packet to process
@@ -306,6 +303,12 @@ public:
 	 * @return A map of all connections managed. Notice this map is constant and cannot be changed by the user
 	 */
 	const ConnectionInfoList& getConnectionInformation() const { return m_ConnectionInfo; }
+
+	/**
+	 * Get an instance of connection viewer
+	 * @return An instance of connection viewer bound to this TcpReassembly instance
+	 */
+	inline ConnectionViewer getConnectionViewer() const;
 
 	/**
 	 * Check if a certain connection managed by this TcpReassembly instance is currently opened or closed
@@ -345,12 +348,13 @@ private:
 
 	struct TcpReassemblyData
 	{
+		bool closed;
 		int8_t numOfSides;
 		int8_t prevSide;
 		TcpOneSideData twoSides[2];
 		ConnectionData connData;
 
-		TcpReassemblyData() : numOfSides(0), prevSide(-1) {}
+		TcpReassemblyData() : closed(false), numOfSides(0), prevSide(-1) {}
 	};
 	
 	#if __cplusplus > 199711L || _MSC_VER >= 1800
@@ -359,7 +363,7 @@ private:
 	typedef std::list<uint32_t> CleanupListType;
 	#endif
 
-	typedef std::map<uint32_t, TcpReassemblyData*> ConnectionList;
+	typedef std::map<uint32_t, TcpReassemblyData> ConnectionList;
 	typedef std::map<time_t, CleanupListType> CleanupList;
 
 	OnTcpMessageReady m_OnMessageReadyCallback;
@@ -381,8 +385,159 @@ private:
 	void closeConnectionInternal(uint32_t flowKey, ConnectionEndReason reason);
 
 	void insertIntoCleanupList(uint32_t flowKey);
-};
+}; // class TcpReassembly
 
+
+
+/**
+ * A class that allows to get information for connections managed by certain TcpReassembly instance
+ */
+class TcpReassembly::ConnectionViewer
+{
+protected:
+	template <typename ValueType, typename IteratorType>
+	class InputIterator;
+
+public:
+	friend class TcpReassembly;
+
+	/**
+	 * A type definition for const iterator
+	 */
+	typedef InputIterator<const ConnectionData, ConnectionList::const_iterator> const_iterator;
+
+	/**
+	 * @return An iterator object pointing to the first element
+	 */
+	inline const_iterator begin() const;
+
+	/**
+	 * @return An iterator object pointing to the past-the-end element
+	 */
+	inline const_iterator end() const;
+
+	/**
+	 * Find the connection by flow key
+	 * @param[in] flowKey A key of element to be found
+	 * @return An iterator object pointing to the element. If no such element is found, past-the-end iterator is returned
+	 */
+	inline const_iterator find(const ConnectionData& connection) const;
+
+	/**
+	 * @return True if the connection list is empty otherwise false
+	 */
+	inline bool empty() const;
+
+	/**
+	 * @return The current size of the connection list
+	 */
+	inline size_t size() const;
+
+protected:
+	/**
+	 * A c'tor for this class
+	 * @param[in] tcpReassembly A reference to TcpReassembly instance
+	 */
+	ConnectionViewer(const TcpReassembly& tcpReassembly) : m_TcpReassembly(tcpReassembly) {}
+	
+	const TcpReassembly& m_TcpReassembly;
+}; // class TcpReassembly::ConnectionViewer
+
+
+
+/**
+ * A template class of iterator that is used in connection viewer
+ */
+template <typename ValueType, typename IteratorType>
+class TcpReassembly::ConnectionViewer::InputIterator : public std::iterator<std::input_iterator_tag, ValueType>
+{
+public:
+	/**
+	 * Copy constructor
+	 */
+	InputIterator(const InputIterator& iter) : m_Iterator { iter.m_Iterator } {}
+
+	/**
+	 * Copy assignement operator
+	 */
+	InputIterator& operator=(const InputIterator& iter) { m_Iterator = iter.m_Iterator; return *this; }
+
+	/**
+	 * Overload of equal-to operator
+	 */
+	bool operator==(const InputIterator& iter) const { return m_Iterator == iter.m_Iterator; }
+
+	/**
+	 * Overload of not-equal-to operator
+	 */
+	bool operator!=(const InputIterator& iter) const { return m_Iterator != iter.m_Iterator; }
+
+	/**
+	 * Overload of pre-increment operator
+	 */
+	InputIterator& operator++() { ++m_Iterator; return *this; }
+
+	/**
+	 * Overload of post-increment operator
+	 */
+	InputIterator operator++(int) { InputIterator prev(m_Iterator); ++m_Iterator; return prev; }
+
+	/**
+	 * Overload of operator*
+	 */
+	ValueType& operator*() const { return m_Iterator->second.connData; }
+
+	/**
+	 * Overload of operator->
+	 */
+	ValueType* operator->() const { return &operator*(); }
+
+protected:
+	friend class TcpReassembly::ConnectionViewer;
+
+	IteratorType m_Iterator;
+
+	/**
+	 * A c'tor for this class
+	 * @param[in] iter An iterator to container to be accessed through this iterator
+	 */
+	InputIterator(IteratorType iter) : m_Iterator(iter) {}
+}; // class TcpReassembly::ConnectionViewer::InputIterator
+
+
+
+// implementation of inline methods
+
+TcpReassembly::ConnectionViewer TcpReassembly::getConnectionViewer() const
+{
+	return ConnectionViewer(*this);
 }
+
+TcpReassembly::ConnectionViewer::const_iterator TcpReassembly::ConnectionViewer::begin() const
+{
+	return m_TcpReassembly.m_ConnectionList.begin();
+}
+
+TcpReassembly::ConnectionViewer::const_iterator TcpReassembly::ConnectionViewer::end() const
+{
+	return m_TcpReassembly.m_ConnectionList.end();
+}
+
+TcpReassembly::ConnectionViewer::const_iterator TcpReassembly::ConnectionViewer::find(const ConnectionData& connection) const
+{
+	return m_TcpReassembly.m_ConnectionList.find(connection.flowKey);
+}
+
+bool TcpReassembly::ConnectionViewer::empty() const
+{
+	return m_TcpReassembly.m_ConnectionList.empty();
+}
+
+size_t TcpReassembly::ConnectionViewer::size() const
+{
+	return m_TcpReassembly.m_ConnectionList.size();
+}
+
+} // namespace pcpp
 
 #endif /* PACKETPP_TCP_REASSEMBLY */

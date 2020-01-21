@@ -35,14 +35,6 @@ TcpReassembly::TcpReassembly(OnTcpMessageReady onMessageReadyCallback, void* use
 	m_PurgeTimepoint = time(NULL) + PURGE_FREQ_SECS;
 }
 
-TcpReassembly::~TcpReassembly()
-{
-	while (!m_ConnectionList.empty())
-	{
-		delete m_ConnectionList.begin()->second;
-		m_ConnectionList.erase(m_ConnectionList.begin());
-	}
-}
 
 
 struct IPAddresses
@@ -133,10 +125,10 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	if (tcpPayloadSize == 0 && tcpLayer->getTcpHeader()->synFlag == 0 && !isFinOrRst)
 		return;
 
-	TcpReassemblyData* tcpReassemblyData = NULL;
-
 	// calculate flow key for this packet
 	uint32_t flowKey = hash5Tuple(&tcpData, ipLayer, tcpLayer);
+
+	TcpReassemblyData *tcpReassemblyData;
 
 	// find the connection in the connection map
 	ConnectionList::iterator iter = m_ConnectionList.find(flowKey);
@@ -144,7 +136,9 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	if (unlikely(iter == m_ConnectionList.end()))
 	{
 		// if it's a packet of a new connection, create a TcpReassemblyData object and add it to the active connection list
-		tcpReassemblyData = new TcpReassemblyData();
+		std::pair<ConnectionList::iterator, bool> pair = m_ConnectionList.insert(std::make_pair(flowKey, TcpReassemblyData()));
+		iter = pair.first;
+		tcpReassemblyData = &iter->second;
 		tcpReassemblyData->connData.setSrcIpAddress(ipAddrs.src);
 		tcpReassemblyData->connData.setDstIpAddress(ipAddrs.dst);
 		tcpReassemblyData->connData.srcPort = be16toh(tcpLayer->getTcpHeader()->portSrc);
@@ -153,7 +147,6 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		timeval ts = tcpData.getRawPacket()->getPacketTimeStamp();
 		tcpReassemblyData->connData.setStartTime(ts);
 
-		m_ConnectionList[flowKey] = tcpReassemblyData;
 		m_ConnectionInfo[flowKey] = tcpReassemblyData->connData;
 
 		// fire connection start callback
@@ -163,14 +156,13 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	else // connection already exists
 	{
 		// if this packet belongs to a connection that was already closed (for example: data packet that comes after FIN), ignore it.
-		// the connection is already closed when the value of mapped type is NULL
-		if (unlikely(iter->second == NULL))
+		if (unlikely(iter->second.closed))
 		{
 			LOG_DEBUG("Ignoring packet of already closed flow [0x%X]", flowKey);
 			return;
 		}
 
-		tcpReassemblyData = iter->second;
+		tcpReassemblyData = &iter->second;
 		timeval currTime = tcpData.getRawPacket()->getPacketTimeStamp();
 		if (currTime.tv_sec > tcpReassemblyData->connData.endTime.tv_sec)
 		{
@@ -185,11 +177,12 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		}
 	}
 
-	int8_t sideIndex = -1;
-	bool first = false;
 
 	// calculate packet's source port
 	uint16_t srcPort = tcpLayer->getTcpHeader()->portSrc;
+
+	bool first = false;
+	int8_t sideIndex;
 
 	switch (tcpReassemblyData->numOfSides)
 	{
@@ -640,24 +633,23 @@ void TcpReassembly::closeConnectionInternal(uint32_t flowKey, ConnectionEndReaso
 		return;
 	}
 
-	if (iter->second == NULL) // the connection is already closed
+	TcpReassemblyData& tcpReassemblyData = iter->second;
+
+	if(tcpReassemblyData.closed) // the connection is already closed
 		return;
 
 	LOG_DEBUG("Closing connection with flow key 0x%X", flowKey);
 
-	TcpReassemblyData* tcpReassemblyData = iter->second;
-
 	LOG_DEBUG("Calling checkOutOfOrderFragments on side 0");
-	checkOutOfOrderFragments(tcpReassemblyData, 0, true);
+	checkOutOfOrderFragments(&tcpReassemblyData, 0, true);
 
 	LOG_DEBUG("Calling checkOutOfOrderFragments on side 1");
-	checkOutOfOrderFragments(tcpReassemblyData, 1, true);
+	checkOutOfOrderFragments(&tcpReassemblyData, 1, true);
 
 	if (m_OnConnEnd != NULL)
-		m_OnConnEnd(tcpReassemblyData->connData, reason, m_UserCookie);
+		m_OnConnEnd(tcpReassemblyData.connData, reason, m_UserCookie);
 
-	delete tcpReassemblyData;
-	iter->second = NULL; // mark the connection as closed
+	tcpReassemblyData.closed = true; // mark the connection as closed
 	insertIntoCleanupList(flowKey);
 
 	LOG_DEBUG("Connection with flow key 0x%X is closed", flowKey);
@@ -670,25 +662,25 @@ void TcpReassembly::closeAllConnections()
 	ConnectionList::iterator iter = m_ConnectionList.begin(), iterEnd = m_ConnectionList.end();
 	for (; iter != iterEnd; ++iter)
 	{
-		if (iter->second == NULL) // the connection is already closed, skip it
+		TcpReassemblyData &tcpReassemblyData = iter->second;
+
+		if(tcpReassemblyData.closed) // the connection is already closed, skip it
 			continue;
 
-		TcpReassemblyData* tcpReassemblyData = iter->second;
-
-		uint32_t flowKey = tcpReassemblyData->connData.flowKey;
+		uint32_t flowKey = tcpReassemblyData.connData.flowKey;
 		LOG_DEBUG("Closing connection with flow key 0x%X", flowKey);
 
 		LOG_DEBUG("Calling checkOutOfOrderFragments on side 0");
-		checkOutOfOrderFragments(tcpReassemblyData, 0, true);
+		checkOutOfOrderFragments(&tcpReassemblyData, 0, true);
 
 		LOG_DEBUG("Calling checkOutOfOrderFragments on side 1");
-		checkOutOfOrderFragments(tcpReassemblyData, 1, true);
+		checkOutOfOrderFragments(&tcpReassemblyData, 1, true);
 
 		if (m_OnConnEnd != NULL)
-			m_OnConnEnd(tcpReassemblyData->connData, TcpReassemblyConnectionClosedManually, m_UserCookie);
+			m_OnConnEnd(tcpReassemblyData.connData, TcpReassemblyConnectionClosedManually, m_UserCookie);
 
-		delete tcpReassemblyData;
-		iter->second = NULL; // mark the connection as closed
+		tcpReassemblyData.closed = true; // mark the connection as closed
+
 		insertIntoCleanupList(flowKey);
 
 		LOG_DEBUG("Connection with flow key 0x%X is closed", flowKey);
@@ -699,7 +691,7 @@ int TcpReassembly::isConnectionOpen(const ConnectionData& connection) const
 {
 	ConnectionList::const_iterator iter = m_ConnectionList.find(connection.flowKey);
 	if (iter != m_ConnectionList.end())
-		return iter->second != NULL; // If the value of mapped type is NULL then this connection is closed
+		return iter->second.closed == false;
 
 	return -1;
 }
