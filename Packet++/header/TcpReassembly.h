@@ -244,8 +244,9 @@ public:
 	 * A callback invoked when a new TCP connection is identified (whether it begins with a SYN packet or not)
 	 * @param[in] connectionData Connection information
 	 * @param[in] userCookie A pointer to the cookie provided by the user in TcpReassembly c'tor (or NULL if no cookie provided)
+	 * @param[in] pkt A const reference to packet that allows to extract the information from the other layers such as IP or Ethernet
 	 */
-	typedef void (*OnTcpConnectionStart)(const ConnectionData& connectionData, void* userCookie);
+	typedef void (*OnTcpConnectionStart)(const ConnectionData& connectionData, void* userCookie, const Packet& pkt);
 
 	/**
 	 * @typedef OnTcpConnectionEnd

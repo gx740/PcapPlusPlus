@@ -149,7 +149,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 		// fire connection start callback
 		if (m_OnConnStart != NULL)
-			m_OnConnStart(tcpReassemblyData->connData, m_UserCookie);
+			m_OnConnStart(tcpReassemblyData->connData, m_UserCookie, tcpData);
 	}
 	else // connection already exists
 	{

@@ -4663,7 +4663,7 @@ void tcpReassemblyMsgReadyCallback(int8_t sideIndex, const TcpStreamData& tcpDat
 	//printf("\n***** got %d bytes from side %d conn 0x%X *****\n", tcpData.getDataLength(), sideIndex, tcpData.getConnectionData().flowKey);
 }
 
-void tcpReassemblyConnectionStartCallback(const ConnectionData& connectionData, void* userCookie)
+void tcpReassemblyConnectionStartCallback(const ConnectionData& connectionData, void* userCookie, const Packet& pkt)
 {
 	TcpReassemblyMultipleConnStats::Stats &stats = ((TcpReassemblyMultipleConnStats*)userCookie)->stats;
 

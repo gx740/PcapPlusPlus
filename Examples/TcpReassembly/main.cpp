@@ -420,7 +420,7 @@ static void tcpReassemblyMsgReadyCallback(int8_t sideIndex, const TcpStreamData&
 /**
  * The callback being called by the TCP reassembly module whenever a new connection is found. This method adds the connection to the connection manager
  */
-static void tcpReassemblyConnectionStartCallback(const ConnectionData& connectionData, void* userCookie)
+static void tcpReassemblyConnectionStartCallback(const ConnectionData& connectionData, void* userCookie, const Packet& pkt)
 {
 	// get a pointer to the connection manager
 	TcpReassemblyConnMgr* connMgr = (TcpReassemblyConnMgr*)userCookie;
