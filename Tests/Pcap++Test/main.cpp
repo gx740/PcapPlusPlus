@@ -5213,25 +5213,25 @@ PTF_TEST_CASE(TestTcpReassemblyMultipleConns)
 	PTF_ASSERT(expectedReassemblyData == iter->second.reassembledData, "Conn #3: Reassembly data different than expected");
 
 
-	// test getConnectionInformation and isConnectionOpen
+	// test isConnectionOpen
 
-	const TcpReassembly::ConnectionInfoList &managedConnections = tcpReassembly.getConnectionInformation();
-	PTF_ASSERT(managedConnections.size() == 3, "Size of managed connection list isn't 3");
+	TcpReassembly::ConnectionViewer managedConnections = tcpReassembly.getConnectionInformation();
+	PTF_ASSERT_EQUAL(managedConnections.size(),3, size);
 
-	TcpReassembly::ConnectionInfoList::const_iterator iterConn1 = managedConnections.find(results.flowKeysList[0]);
-	TcpReassembly::ConnectionInfoList::const_iterator iterConn2 = managedConnections.find(results.flowKeysList[1]);
-	TcpReassembly::ConnectionInfoList::const_iterator iterConn3 = managedConnections.find(results.flowKeysList[2]);
-	PTF_ASSERT(iterConn1 != managedConnections.end(), "Connection #1 not found");
-	PTF_ASSERT(iterConn2 != managedConnections.end(), "Connection #2 not found");
-	PTF_ASSERT(iterConn3 != managedConnections.end(), "Connection #3 not found");
-	PTF_ASSERT(tcpReassembly.isConnectionOpen(iterConn1->second) > 0, "Connection #1 is closed");
-	PTF_ASSERT(tcpReassembly.isConnectionOpen(iterConn2->second) == 0, "Connection #2 is still open");
-	PTF_ASSERT(tcpReassembly.isConnectionOpen(iterConn3->second) == 0, "Connection #3 is still open");
-
-	ConnectionData dummyConn;
-	dummyConn.flowKey = 0x12345678;
-	PTF_ASSERT(tcpReassembly.isConnectionOpen(dummyConn) < 0, "Dummy connection exists");
-
+	ConnectionData conn1, conn2, conn3;
+	conn1.flowKey = results.flowKeysList[0];
+	conn2.flowKey = results.flowKeysList[1];
+	conn3.flowKey = results.flowKeysList[2];
+	TcpReassembly::ConnectionViewer::const_iterator
+		iterConn1 = managedConnections.find(conn1),
+		iterConn2 = managedConnections.find(conn2),
+		iterConn3 = managedConnections.find(conn3);
+	PTF_ASSERT_TRUE(iterConn1 != managedConnections.end());
+	PTF_ASSERT_TRUE(iterConn2 != managedConnections.end());
+	PTF_ASSERT_TRUE(iterConn3 != managedConnections.end());
+	PTF_ASSERT_TRUE(tcpReassembly.isConnectionOpen(*iterConn1) > 0);
+	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(*iterConn2), 0, int);
+	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(*iterConn3), 0, int);
 
 	// close flow manually and verify it's closed
 
@@ -5451,19 +5451,24 @@ PTF_TEST_CASE(TestTcpReassemblyCleanup)
 		tcpReassembly.reassemblePacket(packet);
 	}
 
-	TcpReassembly::ConnectionInfoList managedConnections = tcpReassembly.getConnectionInformation(); // make a copy of list
+	TcpReassembly::ConnectionViewer managedConnections = tcpReassembly.getConnectionInformation();
 	PTF_ASSERT_EQUAL(managedConnections.size(), 3, size);
 	PTF_ASSERT_EQUAL(results.flowKeysList.size(), 3, size);
 
-	TcpReassembly::ConnectionInfoList::const_iterator iterConn1 = managedConnections.find(results.flowKeysList[0]);
-	TcpReassembly::ConnectionInfoList::const_iterator iterConn2 = managedConnections.find(results.flowKeysList[1]);
-	TcpReassembly::ConnectionInfoList::const_iterator iterConn3 = managedConnections.find(results.flowKeysList[2]);
-	PTF_ASSERT(iterConn1 != managedConnections.end(), "Connection #1 not found");
-	PTF_ASSERT(iterConn2 != managedConnections.end(), "Connection #2 not found");
-	PTF_ASSERT(iterConn3 != managedConnections.end(), "Connection #3 not found");
-	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(iterConn1->second), 0, int);
-	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(iterConn2->second), 0, int);
-	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(iterConn3->second), 0, int);
+	ConnectionData conn1, conn2, conn3;
+	conn1.flowKey = results.flowKeysList[0];
+	conn2.flowKey = results.flowKeysList[1];
+	conn3.flowKey = results.flowKeysList[2];
+	TcpReassembly::ConnectionViewer::const_iterator
+		iterConn1 = managedConnections.find(conn1),
+		iterConn2 = managedConnections.find(conn2),
+		iterConn3 = managedConnections.find(conn3);
+	PTF_ASSERT_TRUE(iterConn1 != managedConnections.end());
+	PTF_ASSERT_TRUE(iterConn2 != managedConnections.end());
+	PTF_ASSERT_TRUE(iterConn3 != managedConnections.end());
+	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(*iterConn1), 0, int);
+	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(*iterConn2), 0, int);
+	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(*iterConn3), 0, int);
 
 	PCAP_SLEEP(3);
 
@@ -5476,16 +5481,10 @@ PTF_TEST_CASE(TestTcpReassemblyCleanup)
 	tcpReassembly.purgeClosedConnections(0xFFFFFFFF); // manually initiated cleanup of all items
 	PTF_ASSERT_EQUAL(tcpReassembly.getConnectionInformation().size(), 0, size);
 
-	const TcpReassemblyMultipleConnStats::FlowKeysList& flowKeys = results.flowKeysList;
-	iterConn1 = managedConnections.find(flowKeys[0]);
-	iterConn2 = managedConnections.find(flowKeys[1]);
-	iterConn3 = managedConnections.find(flowKeys[2]);
-	PTF_ASSERT(iterConn1 != managedConnections.end(), "Connection #1 not found in flow keys list");
-	PTF_ASSERT(iterConn2 != managedConnections.end(), "Connection #2 not found in flow keys list");
-	PTF_ASSERT(iterConn3 != managedConnections.end(), "Connection #3 not found in flow keys list");
-	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(iterConn1->second), -1, int);
-	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(iterConn2->second), -1, int);
-	PTF_ASSERT_EQUAL(tcpReassembly.isConnectionOpen(iterConn3->second), -1, int);
+	// checking that the connections do not exist
+	PTF_ASSERT_TRUE(tcpReassembly.isConnectionOpen(conn1) < 0);
+	PTF_ASSERT_TRUE(tcpReassembly.isConnectionOpen(conn2) < 0);
+	PTF_ASSERT_TRUE(tcpReassembly.isConnectionOpen(conn3) < 0);
 } // TestTcpReassemblyCleanup
 
 
@@ -5495,7 +5494,7 @@ PTF_TEST_CASE(TestTcpReassemblyViewer)
 	std::string errMsg;
 
 	TcpReassembly tcpReassembly(tcpReassemblyMsgReadyCallback, &results, tcpReassemblyConnectionStartCallback, tcpReassemblyConnectionEndCallback);
-	TcpReassembly::ConnectionViewer managedConnections = tcpReassembly.getConnectionViewer();
+	TcpReassembly::ConnectionViewer managedConnections = tcpReassembly.getConnectionInformation();
 	PTF_ASSERT_TRUE(managedConnections.empty());
 	PTF_ASSERT_TRUE(managedConnections.begin() == managedConnections.end());
 
@@ -5516,19 +5515,19 @@ PTF_TEST_CASE(TestTcpReassemblyViewer)
 
 	ConnectionData firstElement = *iter; // make a copy of the first element
 
-	// testing the increment operators
+	// test of increment operators
 	TcpReassembly::ConnectionViewer::const_iterator firstConnIter = iter++, secondConnIter = iter, thirdConnIter = ++iter;
 	PTF_ASSERT_TRUE(firstConnIter == managedConnections.begin());
 	PTF_ASSERT_FALSE(firstConnIter == secondConnIter);
 	PTF_ASSERT_TRUE(++thirdConnIter == managedConnections.end());
 
-	// testing the operator->()
+	// test of operator->()
 	PTF_ASSERT_EQUAL(firstElement.dstIP, firstConnIter->dstIP, object);
 	PTF_ASSERT_EQUAL(firstElement.srcIP, firstConnIter->srcIP, object);
 	PTF_ASSERT_EQUAL(firstElement.srcPort, firstConnIter->srcPort, u16);
 	PTF_ASSERT_EQUAL(firstElement.dstPort, firstConnIter->dstPort, u16);
 
-	// testing the lookup
+	// test lookup
 	TcpReassembly::ConnectionViewer::const_iterator resIter = managedConnections.find(firstElement);
 	PTF_ASSERT_TRUE(resIter!= managedConnections.end());
 	PTF_ASSERT_TRUE(resIter == firstConnIter);

@@ -147,8 +147,6 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		timeval ts = tcpData.getRawPacket()->getPacketTimeStamp();
 		tcpReassemblyData->connData.setStartTime(ts);
 
-		m_ConnectionInfo[flowKey] = tcpReassemblyData->connData;
-
 		// fire connection start callback
 		if (m_OnConnStart != NULL)
 			m_OnConnStart(tcpReassemblyData->connData, m_UserCookie);
@@ -726,7 +724,6 @@ uint32_t TcpReassembly::purgeClosedConnections(uint32_t maxNumToClean)
 		for (; !keysList.empty() && count < maxNumToClean; ++count)
 		{
 			CleanupList::mapped_type::const_reference key = keysList.front();
-			m_ConnectionInfo.erase(key);
 			m_ConnectionList.erase(key);
 			keysList.pop_front();
 		}

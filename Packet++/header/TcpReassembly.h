@@ -231,11 +231,6 @@ public:
 	};
 
 	/**
-	 * The type for storing the connection information
-	 */
-	typedef std::map<uint32_t, ConnectionData> ConnectionInfoList;
-
-	/**
 	 * @typedef OnTcpMessageReady
 	 * A callback invoked when new data arrives on a connection
 	 * @param[in] side The side this data belongs to (MachineA->MachineB or vice versa). The value is 0 or 1 where 0 is the first side seen in the connection and 1 is the second side seen
@@ -299,16 +294,11 @@ public:
 	void closeAllConnections();
 
 	/**
-	 * Get a map of all connections managed by this TcpReassembly instance (both connections that are open and those that are already closed)
-	 * @return A map of all connections managed. Notice this map is constant and cannot be changed by the user
-	 */
-	const ConnectionInfoList& getConnectionInformation() const { return m_ConnectionInfo; }
-
-	/**
-	 * Get an instance of connection viewer
+	 * Get an instance of connection viewer that gives read-only access to all connections managed by this TcpReassembly instance
+	 * (both connections that are open and those that are already closed)
 	 * @return An instance of connection viewer bound to this TcpReassembly instance
 	 */
-	inline ConnectionViewer getConnectionViewer() const;
+	inline ConnectionViewer getConnectionInformation() const;
 
 	/**
 	 * Check if a certain connection managed by this TcpReassembly instance is currently opened or closed
@@ -371,7 +361,6 @@ private:
 	OnTcpConnectionEnd m_OnConnEnd;
 	void* m_UserCookie;
 	ConnectionList m_ConnectionList;
-	ConnectionInfoList m_ConnectionInfo;
 	CleanupList m_CleanupList;
 	bool m_RemoveConnInfo;
 	uint32_t m_ClosedConnectionDelay;
@@ -508,7 +497,7 @@ protected:
 
 // implementation of inline methods
 
-TcpReassembly::ConnectionViewer TcpReassembly::getConnectionViewer() const
+TcpReassembly::ConnectionViewer TcpReassembly::getConnectionInformation() const
 {
 	return ConnectionViewer(*this);
 }
