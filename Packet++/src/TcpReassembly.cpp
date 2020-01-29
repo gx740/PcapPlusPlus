@@ -108,7 +108,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	// copy working statistics into shared one
 	if (unlikely(currentTime >= m_StatNextTime))
 	{
-		if(likely(workStatToShared() == true))
+		if(likely(updateStatistics() == true))
 			m_StatNextTime = time(NULL) + STAT_UPDATE_FREQ_SECS;
 	}
 
@@ -769,7 +769,7 @@ uint32_t TcpReassembly::purgeClosedConnections(uint32_t maxNumToClean)
 	return count;
 }
 
-bool TcpReassembly::workStatToShared()
+bool TcpReassembly::updateStatistics()
 {
 	#if __cplusplus > 199711L || _MSC_VER >= 1800
 	if(m_StatMutex.try_lock())

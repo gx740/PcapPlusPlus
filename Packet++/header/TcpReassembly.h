@@ -344,6 +344,12 @@ public:
 	uint32_t purgeClosedConnections(uint32_t maxNumToClean = 0);
 
 	/**
+	 * Copy working statistics into shared one
+	 * @return True if an operation is successfully completed, False otherwise
+	 */
+	bool updateStatistics();
+
+	/**
 	 * @return The current statistics
 	 */
 	Statistics getStatistics() const;
@@ -406,8 +412,6 @@ private:
 	#endif
 	Statistics m_Stat, m_SharedStat;
 	time_t m_StatNextTime;
-
-	bool workStatToShared();
 
 	void checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyData, int8_t sideIndex, bool cleanWholeFragList);
 
