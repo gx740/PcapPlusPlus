@@ -445,6 +445,7 @@ void TcpReassembly::handleFinOrRst(TcpReassemblyData* tcpReassemblyData, int8_t 
 
 void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyData, int8_t sideIndex, bool cleanWholeFragList)
 {
+	TcpOneSideData& sideData = tcpReassemblyData->twoSides[sideIndex];
 	bool foundSomething = false;
 
 	do
@@ -459,15 +460,15 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 
 			// first fragment list iteration - go over the whole fragment list and see if can find fragments that match the current sequence
 			// or have smaller sequence but have big enough payload to get new data
-			for (int index = 0; index < (int)tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size();)
+			for (int index = 0; index < (int)sideData.tcpFragmentList.size();)
 			{
-				TcpFragment* curTcpFrag = tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.at(index);
+				const TcpFragment* curTcpFrag = sideData.tcpFragmentList.at(index);
 
 				// if fragment sequence matches the current sequence
-				if (curTcpFrag->sequence == tcpReassemblyData->twoSides[sideIndex].sequence)
+				if (curTcpFrag->sequence == sideData.sequence)
 				{
 					// update sequence
-					tcpReassemblyData->twoSides[sideIndex].sequence += curTcpFrag->dataLength;
+					sideData.sequence += curTcpFrag->dataLength;
 					if (curTcpFrag->data != NULL)
 					{
 						LOG_DEBUG("Found an out-of-order packet matching to the current sequence with size %d on side %d. Pulling it out of the list and sending the data to the callback", (int)curTcpFrag->dataLength, sideIndex);
@@ -481,30 +482,30 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 					}
 
 					// remove fragment from list
-					tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.erase(tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.begin() + index);
+					sideData.tcpFragmentList.erase(sideData.tcpFragmentList.begin() + index);
 
 					foundSomething = true;
 
-					continue;
+					continue; // don't increment the index because the tcpFragmentList has been repacked
 				}
 
 				// if fragment sequence has lower sequence than the current sequence
-				if (SEQ_LT(curTcpFrag->sequence, tcpReassemblyData->twoSides[sideIndex].sequence))
+				if (SEQ_LT(curTcpFrag->sequence, sideData.sequence))
 				{
 					// check if it still has new data
 					uint32_t newSequence = curTcpFrag->sequence + curTcpFrag->dataLength;
 
 					// it has new data
-					if (SEQ_GT(newSequence, tcpReassemblyData->twoSides[sideIndex].sequence))
+					if (SEQ_GT(newSequence, sideData.sequence))
 					{
 						// calculate the delta new data size
-						uint32_t newLength = tcpReassemblyData->twoSides[sideIndex].sequence - curTcpFrag->sequence;
+						uint32_t newLength = sideData.sequence - curTcpFrag->sequence;
 
 						LOG_DEBUG("Found a fragment in the out-of-order list which its sequence is lower than expected but its payload is long enough to contain new data. "
 							"Calling the callback with the new data. Fragment size is %d on side %d, new data size is %d", (int)curTcpFrag->dataLength, sideIndex, (int)(curTcpFrag->dataLength - newLength));
 
 						// update current sequence with the delta new data size
-						tcpReassemblyData->twoSides[sideIndex].sequence += curTcpFrag->dataLength - newLength;
+						sideData.sequence += curTcpFrag->dataLength - newLength;
 
 						// send only the new data to the callback
 						if (m_OnMessageReadyCallback != NULL)
@@ -521,7 +522,7 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 					}
 
 					// delete fragment from list
-					tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.erase(tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.begin() + index);
+					sideData.tcpFragmentList.erase(sideData.tcpFragmentList.begin() + index);
 
 					continue;
 				}
@@ -548,10 +549,10 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 		bool closestSequenceDefined = false;
 		int closestSequenceFragIndex = -1;
 
-		for (int index = 0; index < (int)tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size(); ++index)
+		for (int index = 0; index < (int)sideData.tcpFragmentList.size(); ++index)
 		{
 			// extract segment at current index
-			TcpFragment* curTcpFrag = tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.at(index);
+			TcpFragment* curTcpFrag = sideData.tcpFragmentList.at(index);
 
 			// check if its sequence is closer than current closest sequence
 			if (!closestSequenceDefined || SEQ_LT(curTcpFrag->sequence, closestSequence))
@@ -566,13 +567,13 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 		if (closestSequenceFragIndex > -1)
 		{
 			// get the fragment with the closest sequence
-			TcpFragment* curTcpFrag = tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.at(closestSequenceFragIndex);
+			TcpFragment* curTcpFrag = sideData.tcpFragmentList.at(closestSequenceFragIndex);
 
 			// calculate number of missing bytes
-			uint32_t missingDataLen = curTcpFrag->sequence - tcpReassemblyData->twoSides[sideIndex].sequence;
+			uint32_t missingDataLen = curTcpFrag->sequence - sideData.sequence;
 
 			// update sequence
-			tcpReassemblyData->twoSides[sideIndex].sequence = curTcpFrag->sequence + curTcpFrag->dataLength;
+			sideData.sequence = curTcpFrag->sequence + curTcpFrag->dataLength;
 			if (curTcpFrag->data != NULL)
 			{
 				// send new data to callback
@@ -598,7 +599,7 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 			}
 
 			// remove fragment from list
-			tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.erase(tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.begin() + closestSequenceFragIndex);
+			sideData.tcpFragmentList.erase(sideData.tcpFragmentList.begin() + closestSequenceFragIndex);
 
 			LOG_DEBUG("Calling checkOutOfOrderFragments again from the start");
 
