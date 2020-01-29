@@ -16,6 +16,7 @@
 #endif
 
 #define PURGE_FREQ_SECS 1
+#define STAT_UPDATE_FREQ_SECS 1
 
 #define SEQ_LT(a,b)  ((int32_t)((a)-(b)) < 0)
 #define SEQ_LEQ(a,b) ((int32_t)((a)-(b)) <= 0)
@@ -47,6 +48,10 @@ TcpReassembly::TcpReassembly(OnTcpMessageReady onMessageReadyCallback, void* use
 	m_RemoveConnInfo = config.removeConnInfo;
 	m_MaxNumToClean = (config.removeConnInfo == true && config.maxNumToClean == 0) ? 30 : config.maxNumToClean;
 	m_PurgeTimepoint = time(NULL) + PURGE_FREQ_SECS;
+	// for statistics
+	memset(&m_Stat, 0, sizeof(m_Stat));
+	memset(&m_SharedStat, 0, sizeof(m_SharedStat));
+	m_StatNextTime = time(NULL) + STAT_UPDATE_FREQ_SECS;
 }
 
 
@@ -88,19 +93,27 @@ static inline IPAddresses getAddresses(const Packet& pkt, Layer** ipLayer)
 
 void TcpReassembly::reassemblePacket(Packet& tcpData)
 {
+	time_t currentTime = time(NULL);
+
 	// automatic cleanup
 	if (likely(m_RemoveConnInfo == true))
 	{
-		if(unlikely(time(NULL) >= m_PurgeTimepoint))
+		if (unlikely(currentTime >= m_PurgeTimepoint))
 		{
 			purgeClosedConnections();
 			m_PurgeTimepoint = time(NULL) + PURGE_FREQ_SECS;
 		}
 	}
 
+	// copy working statistics into shared one
+	if (unlikely(currentTime >= m_StatNextTime))
+	{
+		if(likely(workStatToShared() == true))
+			m_StatNextTime = time(NULL) + STAT_UPDATE_FREQ_SECS;
+	}
 
 	// calculate packet's source and dest IP addresses
-	Layer *ipLayer;
+	Layer* ipLayer;
 	IPAddresses ipAddrs = getAddresses(tcpData, &ipLayer);
 
 	// in real traffic the IP addresses cannot be an unspecified
@@ -146,9 +159,11 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 	// find the connection in the connection map
 	ConnectionList::iterator iter = m_ConnectionList.find(flowKey);
+	m_Stat.conn.lookup++;
 
 	if (unlikely(iter == m_ConnectionList.end()))
 	{
+		m_Stat.conn.insert++;
 		// if it's a packet of a new connection, create a TcpReassemblyData object and add it to the active connection list
 		std::pair<ConnectionList::iterator, bool> pair = m_ConnectionList.insert(std::make_pair(flowKey, TcpReassemblyData()));
 		iter = pair.first;
@@ -304,6 +319,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		{
 			TcpStreamData streamData(tcpLayer->getLayerPayload(), tcpPayloadSize, tcpReassemblyData->connData);
 			m_OnMessageReadyCallback(sideIndex, streamData, m_UserCookie);
+			m_Stat.frag.forwards++;
 		}
 
 		// handle case where this packet is FIN or RST (although it's unlikely)
@@ -338,6 +354,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 			{
 				TcpStreamData streamData(tcpLayer->getLayerPayload() + newLength, tcpPayloadSize - newLength, tcpReassemblyData->connData);
 				m_OnMessageReadyCallback(sideIndex, streamData, m_UserCookie);
+				m_Stat.frag.forwards++;
 			}
 		}
 
@@ -378,6 +395,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		{
 			TcpStreamData streamData(tcpLayer->getLayerPayload(), tcpPayloadSize, tcpReassemblyData->connData);
 			m_OnMessageReadyCallback(sideIndex, streamData, m_UserCookie);
+			m_Stat.frag.forwards++;
 		}
 
 		//while (checkOutOfOrderFragments(tcpReassemblyData, sideIndex)) {}
@@ -414,6 +432,10 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	newTcpFrag->sequence = sequence;
 	memcpy(newTcpFrag->data, tcpLayer->getLayerPayload(), tcpPayloadSize);
 	tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.pushBack(newTcpFrag);
+
+	m_Stat.frag.outOfOrder++;
+	if (unlikely(m_Stat.frag.maxSize < tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size()))
+		m_Stat.frag.maxSize = tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size();
 
 	LOG_DEBUG("Found out-of-order packet and added a new TCP fragment with size %d to the out-of-order list of side %d", (int)tcpPayloadSize, sideIndex);
 
@@ -607,6 +629,8 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 					TcpStreamData streamData(&dataWithMissingDataText[0], dataWithMissingDataText.size(), tcpReassemblyData->connData);
 					m_OnMessageReadyCallback(sideIndex, streamData, m_UserCookie);
 
+					m_Stat.frag.missing++;
+
 					LOG_DEBUG("Found missing data on side %d: %d byte are missing. Sending the closest fragment which is in size %d + missing text message which size is %d",
 						sideIndex, missingDataLen, (int)curTcpFrag->dataLength, (int)missingDataTextStr.length());
 				}
@@ -744,5 +768,30 @@ uint32_t TcpReassembly::purgeClosedConnections(uint32_t maxNumToClean)
 
 	return count;
 }
+
+bool TcpReassembly::workStatToShared()
+{
+	#if __cplusplus > 199711L || _MSC_VER >= 1800
+	if(m_StatMutex.try_lock())
+	{
+		m_SharedStat = m_Stat;
+		m_StatMutex.unlock();
+		return true;
+	}
+	return false;
+	#else
+	m_SharedStat = m_Stat;
+	return true;
+	#endif
+}
+
+TcpReassembly::Statistics TcpReassembly::getStatistics() const
+{
+	#if __cplusplus > 199711L || _MSC_VER >= 1800
+	std::lock_guard<std::mutex> lock(m_StatMutex);
+	#endif
+	return m_SharedStat;
+}
+
 
 }

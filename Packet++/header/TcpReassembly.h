@@ -9,6 +9,7 @@
 
 #if __cplusplus > 199711L || _MSC_VER >= 1800
 #include <forward_list>
+#include <mutex>
 #else
 #include <list>
 #endif
@@ -220,6 +221,33 @@ public:
 	class ConnectionViewer;
 
 	/**
+	 * @struct Statistics
+	 * A struct containing the statistics
+	 */
+	struct Statistics
+	{
+		struct Connections
+		{
+			/* the total number of the lookups in connection list. this value is also the total number of TCP packets processed by TcpReassembly */
+			uint64_t lookup;
+			/* the total number of the inserts into connection list */
+			uint64_t insert;
+		} conn;
+
+		struct Fragments
+		{
+			/* the number of forwarded fragments */
+			uint64_t forwards;
+			/* the total number of fragments that were inserted into out-of-order list */
+			uint64_t outOfOrder;
+			/* the size of the biggest fragment list */
+			uint64_t maxSize;
+			/* the total number of callback calls with message "missing data" */
+			uint64_t missing;
+		} frag;
+	};
+
+	/**
 	 * An enum for connection end reasons
 	 */
 	enum ConnectionEndReason
@@ -315,6 +343,11 @@ public:
 	 */
 	uint32_t purgeClosedConnections(uint32_t maxNumToClean = 0);
 
+	/**
+	 * @return The current statistics
+	 */
+	Statistics getStatistics() const;
+
 private:
 	struct TcpFragment
 	{
@@ -367,6 +400,14 @@ private:
 	uint32_t m_ClosedConnectionDelay;
 	uint32_t m_MaxNumToClean;
 	time_t m_PurgeTimepoint;
+
+	#if __cplusplus > 199711L || _MSC_VER >= 1800
+	mutable std::mutex m_StatMutex;
+	#endif
+	Statistics m_Stat, m_SharedStat;
+	time_t m_StatNextTime;
+
+	bool workStatToShared();
 
 	void checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyData, int8_t sideIndex, bool cleanWholeFragList);
 
