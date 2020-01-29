@@ -293,7 +293,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		}
 
 		// handle case where this packet is FIN or RST (although it's unlikely)
-		if (isFinOrRst)
+		if (unlikely(isFinOrRst))
 			handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
 
 		// return - nothing else to do here
@@ -328,7 +328,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		}
 
 		// handle case where this packet is FIN or RST
-		if (isFinOrRst)
+		if (unlikely(isFinOrRst))
 			handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
 
 		// return - nothing else to do here
@@ -336,15 +336,15 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	}
 
 	// if packet sequence is exactly as expected - this is the "good" case and the most common one
-	if (sequence == tcpReassemblyData->twoSides[sideIndex].sequence)
+	if (likely(sequence == tcpReassemblyData->twoSides[sideIndex].sequence))
 	{
 		// if TCP data size is 0 - nothing to do
-		if (tcpPayloadSize == 0)
+		if (unlikely(tcpPayloadSize == 0))
 		{
 			LOG_DEBUG("Payload length is 0, doing nothing");
 
 			// handle case where this packet is FIN or RST
-			if (isFinOrRst)
+			if (unlikely(isFinOrRst))
 				handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
 
 			return;
@@ -372,7 +372,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 		checkOutOfOrderFragments(tcpReassemblyData, sideIndex, false);
 
 		// handle case where this packet is FIN or RST
-		if (isFinOrRst)
+		if (unlikely(isFinOrRst))
 			handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
 
 		// return - nothing else to do here
@@ -382,12 +382,12 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	// this case means sequence size of the packet is higher than expected which means the packet is out-of-order or some packets were lost (missing data).
 	// we don't know which of the 2 cases it is at this point so we just add this data to the out-of-order packet list
 	
-	if (tcpPayloadSize == 0) // if TCP data size is 0 - nothing to do
+	if (unlikely(tcpPayloadSize == 0)) // if TCP data size is 0 - nothing to do
 	{
 		LOG_DEBUG("Payload length is 0, doing nothing");
 
 		// handle case where this packet is FIN or RST
-		if (isFinOrRst)
+		if (unlikely(isFinOrRst))
 			handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
 
 		return;
@@ -404,7 +404,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	LOG_DEBUG("Found out-of-order packet and added a new TCP fragment with size %d to the out-of-order list of side %d", (int)tcpPayloadSize, sideIndex);
 
 	// handle case where this packet is FIN or RST
-	if (isFinOrRst)
+	if (unlikely(isFinOrRst))
 	{
 		handleFinOrRst(tcpReassemblyData, sideIndex, flowKey);
 		return;
@@ -451,17 +451,15 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 	{
 		LOG_DEBUG("Starting first iteration of checkOutOfOrderFragments - looking for fragments that match the current sequence or have smaller sequence");
 
-		int index = 0;
 		foundSomething = false;
 
 		do
 		{
-			index = 0;
 			foundSomething = false;
 
 			// first fragment list iteration - go over the whole fragment list and see if can find fragments that match the current sequence
 			// or have smaller sequence but have big enough payload to get new data
-			while (index < (int)tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size())
+			for (int index = 0; index < (int)tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size();)
 			{
 				TcpFragment* curTcpFrag = tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.at(index);
 
@@ -475,14 +473,12 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 						LOG_DEBUG("Found an out-of-order packet matching to the current sequence with size %d on side %d. Pulling it out of the list and sending the data to the callback", (int)curTcpFrag->dataLength, sideIndex);
 
 						// send new data to callback
-
 						if (m_OnMessageReadyCallback != NULL)
 						{
 							TcpStreamData streamData(curTcpFrag->data, curTcpFrag->dataLength, tcpReassemblyData->connData);
 							m_OnMessageReadyCallback(sideIndex, streamData, m_UserCookie);
 						}
 					}
-
 
 					// remove fragment from list
 					tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.erase(tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.begin() + index);
@@ -532,7 +528,7 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 
 				//if got to here it means the fragment has higher sequence than current sequence, increment index and continue
 				index++;
-			}
+			} // for all fragments
 
 			// if managed to find new segment, do the search all over again
 		} while (foundSomething);
@@ -551,9 +547,8 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 		uint32_t closestSequence = 0xffffffff;
 		bool closestSequenceDefined = false;
 		int closestSequenceFragIndex = -1;
-		index = 0;
 
-		while (index < (int)tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size())
+		for (int index = 0; index < (int)tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.size(); ++index)
 		{
 			// extract segment at current index
 			TcpFragment* curTcpFrag = tcpReassemblyData->twoSides[sideIndex].tcpFragmentList.at(index);
@@ -565,9 +560,7 @@ void TcpReassembly::checkOutOfOrderFragments(TcpReassemblyData* tcpReassemblyDat
 				closestSequenceFragIndex = index;
 				closestSequenceDefined = true;
 			}
-
-			index++;
-		}
+		} // for all fragments
 
 		// this means fragment list is not empty at this stage
 		if (closestSequenceFragIndex > -1)
