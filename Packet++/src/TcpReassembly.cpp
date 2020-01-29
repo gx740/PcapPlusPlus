@@ -112,6 +112,8 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 			m_StatNextTime = time(NULL) + STAT_UPDATE_FREQ_SECS;
 	}
 
+	m_Stat.pkts.total++;
+
 	// calculate packet's source and dest IP addresses
 	Layer* ipLayer;
 	IPAddresses ipAddrs = getAddresses(tcpData, &ipLayer);
@@ -120,6 +122,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	if(unlikely(ipAddrs.src.isUnspecified() || ipAddrs.dst.isUnspecified()))
 	{
 		LOG_ERROR("Some IP address is unspecified: srcIP [%s], dstIP [%s]. Ignoring this packet", ipAddrs.src.toString().c_str(), ipAddrs.src.toString().c_str());
+		m_Stat.pkts.wrong++;
 		return;
 	}
 
@@ -129,7 +132,10 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	// Ignore non-TCP packets
 	TcpLayer* tcpLayer = tcpData.getLayerOfType<TcpLayer>(true); // lookup in reverse order
 	if (unlikely(tcpLayer == NULL))
+	{
+		m_Stat.pkts.wrong++;
 		return;
+	}
 
 	// Ignore the packet if it's an ICMP packet that has a TCP layer
 	// Several ICMP messages (like "destination unreachable") have TCP data as part of the ICMP message.
@@ -137,6 +143,7 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 	if (unlikely(tcpData.isPacketOfType(ICMP)))
 	{
 		LOG_DEBUG("Packet is of type ICMP so TCP data is probably  part of the ICMP message. Ignoring this packet");
+		m_Stat.pkts.wrong++;
 		return;
 	}
 
@@ -150,7 +157,10 @@ void TcpReassembly::reassemblePacket(Packet& tcpData)
 
 	// ignore ACK packets or TCP packets with no payload (except for SYN, FIN or RST packets which we'll later need)
 	if (tcpPayloadSize == 0 && tcpLayer->getTcpHeader()->synFlag == 0 && !isFinOrRst)
+	{
+		m_Stat.pkts.ignored++;
 		return;
+	}
 
 	// calculate flow key for this packet
 	uint32_t flowKey = hash5Tuple(&tcpData, ipLayer, tcpLayer);

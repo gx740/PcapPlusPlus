@@ -226,9 +226,19 @@ public:
 	 */
 	struct Statistics
 	{
+		struct Packets
+		{
+			/* the total number of TCP packets processed by TcpReassembly instance */
+			uint64_t total;
+			/* ICMP, non-TCP */
+			uint64_t wrong;
+			/* empty payload */
+			uint64_t ignored;
+		} pkts;
+
 		struct Connections
 		{
-			/* the total number of the lookups in connection list. this value is also the total number of TCP packets processed by TcpReassembly */
+			/* the total number of the lookups in connection list */
 			uint64_t lookup;
 			/* the total number of the inserts into connection list */
 			uint64_t insert;
