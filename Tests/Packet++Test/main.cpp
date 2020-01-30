@@ -1482,7 +1482,7 @@ PTF_TEST_CASE(TcpPacketWithOptionsParsing2)
 
 
 
-PTF_TEST_CASE(TcpPacketParsing)
+PTF_TEST_CASE(TcpMalformedPacketParsing)
 {
 	// malformed TCP packet
 	int bufferLength = 0;
@@ -1497,7 +1497,7 @@ PTF_TEST_CASE(TcpPacketParsing)
 
 	PTF_ASSERT_NOT_NULL(badTcpPacket.getLayerOfType<IPv4Layer>());
 	PTF_ASSERT_NULL(badTcpPacket.getLayerOfType<TcpLayer>());
-} // TcpPacketParsing
+} // TcpMalformedPacketParsing
 
 
 
@@ -7792,7 +7792,7 @@ int main(int argc, char* argv[]) {
 	PTF_RUN_TEST(TcpPacketWithOptionsParsing2, "tcp");
 	PTF_RUN_TEST(TcpPacketCreation, "tcp");
 	PTF_RUN_TEST(TcpPacketCreation2, "tcp");
-	PTF_RUN_TEST(TcpPacketParsing, "tcp");
+	PTF_RUN_TEST(TcpMalformedPacketParsing, "tcp");
 	PTF_RUN_TEST(InsertDataToPacket, "insert");
 	PTF_RUN_TEST(InsertVlanToPacket, "vlan;insert");
 	PTF_RUN_TEST(RemoveLayerTest, "remove_layer");
